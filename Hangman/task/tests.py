@@ -1,61 +1,74 @@
 from hstest.stage_test import *
 from hstest.test_case import TestCase
+from hstest.check_result import CheckResult
+
+from random import shuffle
 
 CheckResult.correct = lambda: CheckResult(True, '')
 CheckResult.wrong = lambda feedback: CheckResult(False, feedback)
 
+description_list = ['python', 'java', 'kotlin', 'javascript']
+out_of_description = ['clojure', 'haskell', 'typescript', 'assembler']
+
+catch = {i: 0 for i in description_list}
+
 
 class CoffeeMachineTest(StageTest):
     def generate(self) -> List[TestCase]:
-        return [
-            TestCase(stdin='python', attach=(True, 'python')),
-            TestCase(stdin='java', attach=(False, 'java')),
-            TestCase(stdin='pyton', attach=(False, '')),
-            TestCase(stdin='python', attach=(True, '')),
-        ]
+        tests = []
+
+        for word in description_list + out_of_description:
+            for i in range(100):
+                tests += [TestCase(stdin=word, attach=word)]
+
+        shuffle(tests)
+
+        word = 'last'
+        tests += [TestCase(stdin=word, attach=word)]
+        return tests
 
     def check(self, reply: str, attach: Any) -> CheckResult:
-
-        right_ans, guess = attach
 
         survived = 'You survived!'
         hanged = 'You lost!'
 
-        if survived in reply and hanged in reply:
+        is_survived = survived in reply
+        is_hanged = hanged in reply
+
+        if is_survived and is_hanged:
             return CheckResult.wrong(
                 f'Looks like your output contains both \"{survived}\"'
-                f' and \"{hanged}\". You should output only one of them.')
+                f' and \"{hanged}\". You should output only one of them.'
+            )
 
-        if survived not in reply and hanged not in reply:
+        if not is_survived and not is_hanged:
             return CheckResult.wrong(
                 f'Looks like your output doesn\'t contain neither \"{survived}\"'
-                f' nor \"{hanged}\". You should output one of them.')
+                f' nor \"{hanged}\". You should output one of them.'
+            )
 
-        if right_ans:
-            if survived in reply:
+        if attach in out_of_description:
+            if is_survived:
+                return CheckResult.wrong(
+                    f'Input contains a word out of the '
+                    f'list form the description but the '
+                    f'program output \"{survived}\"'
+                )
+            else:
                 return CheckResult.correct()
 
-            if guess:
-                return CheckResult.wrong(
-                    'input: ' + 'python\n'
-                    'correct output: ' + survived
-                )
-
-            else:
-                return CheckResult.wrong('')
+        elif attach in description_list:
+            catch[attach] += is_survived
+            return CheckResult.correct()
 
         else:
-            if hanged in reply:
-                return CheckResult.correct()
-
-            if guess:
+            if any(v == 0 for v in catch.values()):
                 return CheckResult.wrong(
-                    'input: ' + 'java\n'
-                    'correct output: ' + hanged
+                    "Looks like your program is not using "
+                    "all of the words to guess from the list in description"
                 )
-
             else:
-                return CheckResult.wrong('')
+                return CheckResult.correct()
 
 
 if __name__ == '__main__':
