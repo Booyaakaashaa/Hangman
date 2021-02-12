@@ -58,6 +58,16 @@ class CoffeeMachineTest(StageTest):
                 return CheckResult.correct()
 
         elif attach in description_list:
+
+            if is_survived:
+                hidden_attach = attach[:3] + '-'*len(attach[3:])
+                if hidden_attach not in reply:
+                    return CheckResult.wrong(
+                        f'Program guessed the word \"{attach}\" '
+                        f'and should output clue \"{hidden_attach}\" '
+                        f'but this line is not in the output'
+                    )
+
             catch[attach] += is_survived
             return CheckResult.correct()
 
