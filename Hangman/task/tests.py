@@ -3,6 +3,7 @@ from hstest.test_case import TestCase
 from hstest.check_result import CheckResult
 
 from random import shuffle
+from string import ascii_lowercase
 
 CheckResult.correct = lambda: CheckResult(True, '')
 CheckResult.wrong = lambda feedback: CheckResult(False, feedback)
@@ -17,68 +18,153 @@ class CoffeeMachineTest(StageTest):
     def generate(self) -> List[TestCase]:
         tests = []
 
-        for word in description_list + out_of_description:
+        for word in description_list + out_of_description + [ascii_lowercase]:
             for i in range(100):
-                tests += [TestCase(stdin=word, attach=word)]
+                words = [w for w in word * 2]
+                shuffle(words)
+                inputs = '\n'.join(words)
+                tests += [TestCase(stdin=inputs, attach=words)]
 
         shuffle(tests)
 
-        word = 'last'
-        tests += [TestCase(stdin=word, attach=word)]
+        word = 'l\na\ns\nt\n' * 2
+        tests += [TestCase(stdin=word, attach='last')]
         return tests
 
+    # in old tests there was a \n after 'Input a letter:' return it!
+    def _fix_reply(self, reply: str):
+        pos = 0
+        phrases = []
+        while True:
+            pos1 = reply.find("letter:", pos)
+            if pos1 == -1:
+                phrases.append(reply[pos:].strip(' '))
+                break
+            pos1 += len("letter:")
+            phrases.append(reply[pos:pos1].strip(' '))
+            pos = pos1
+        return '\n'.join(phrases)
+
     def check(self, reply: str, attach: Any) -> CheckResult:
+        reply = self._fix_reply(reply)
+        tries = [i.strip() for i in reply.strip().split('\n\n') if len(i.strip())]
 
-        survived = 'You survived!'
-        hanged = 'You lost!'
-
-        is_survived = survived in reply
-        is_hanged = hanged in reply
-
-        if is_survived and is_hanged:
+        if len(tries) == 0:
             return CheckResult.wrong(
-                f'Looks like your output contains both \"{survived}\"'
-                f' and \"{hanged}\". You should output only one of them.'
+                "Seems like you didn't print the game or not separated output properly"
+                "(there need to be an empty line between guessing attempts)"
             )
 
-        if not is_survived and not is_hanged:
+        if "Input a letter" not in reply:
             return CheckResult.wrong(
-                f'Looks like your output doesn\'t contain neither \"{survived}\"'
-                f' nor \"{hanged}\". You should output one of them.'
+                "Input doesn't contain any \"Input a letter\" lines"
             )
 
-        if attach in out_of_description:
-            if is_survived:
+        if 'for playing' not in tries[-1]:
+            return CheckResult.wrong(
+                "Last block should contain text \"Thanks for playing!\""
+            )
+
+        elif "Input a letter" in tries[-1]:
+            return CheckResult.wrong(
+                "Last block should not contain text \"Input a letter\""
+            )
+
+        tries = tries[:-1]
+
+        full_blocks = [try_ for try_ in tries if len(try_.splitlines()) > 1]
+        blocks = [block.splitlines()[0].strip() for block in full_blocks]
+
+        if not blocks:
+            return CheckResult.wrong(
+                "Seems like you didn't print the game or did not separate the lines of the output properly.\n"
+                "Please, make sure that the format of your program's output corresponds to the one described in the task."
+            )
+        for full_block, block in zip(full_blocks, blocks):
+            if ' ' in block:
                 return CheckResult.wrong(
-                    f'Input contains a word out of the '
-                    f'list form the description but the '
-                    f'program output \"{survived}\"'
+                    'Cannot parse this block - it contains spaces '
+                    'in the first line, but shouldn\'t\n\n'
+                    f'{full_block}'
                 )
-            else:
-                return CheckResult.correct()
 
-        elif attach in description_list:
+        if len(blocks) < 8:
+            return CheckResult.wrong(
+                f'There are less than 8 blocks of output. '
+                f'Did you separate each guess attempt with a new line?'
+            )
 
-            if is_survived:
-                hidden_attach = attach[:3] + '-'*len(attach[3:])
-                if hidden_attach not in reply:
-                    return CheckResult.wrong(
-                        f'Program guessed the word \"{attach}\" '
-                        f'and should output clue \"{hidden_attach}\" '
-                        f'but this line is not in the output'
-                    )
+        lengths = set(len(i) for i in blocks)
 
-            catch[attach] += is_survived
-            return CheckResult.correct()
+        str_lengths = []
+        for i, curr_len in enumerate(lengths, 1):
+            for curr_block in blocks:
+                if curr_len == len(curr_block):
+                    str_lengths += [f'{i}. {curr_block}']
+                    break
 
-        else:
-            if any(v == 0 for v in catch.values()):
+        str_lengths = '\n'.join(str_lengths)
+
+        if len(lengths) > 1:
+            return CheckResult.wrong(
+                f'Every line with guessed letters should be the same length as others.\n'
+                f'Found lines with guessed letters:\n{str_lengths}'
+            )
+
+        correct = '-' * len(blocks[0])
+
+        if blocks[0] != correct:
+            return CheckResult.wrong(
+                f'The first guess should only contain dashes: \n'
+                f'{correct}\n'
+                f'Your first guess:\n'
+                f'{blocks[0]}'
+            )
+
+        for letter, prev, next in zip(attach, blocks[0:], blocks[1:]):
+
+            cond1 = (
+                    (letter not in prev) and
+                    (letter in next) and
+                    (set(next) - set(prev) != set(letter))
+            )
+
+            cond2 = (
+                    (letter not in prev) and
+                    (letter not in next) and
+                    (next != prev)
+            )
+
+            cond3 = (
+                    (letter in prev) and
+                    (letter in next) and
+                    (next != prev)
+            )
+
+            if cond1 or cond2 or cond3:
+                return CheckResult.wrong(
+                    f'This transition is incorrect:\n'
+                    f'Before: {prev}\n'
+                    f'Letter: {letter}\n'
+                    f'After : {next}'
+                )
+
+        if '-' not in blocks[-1]:
+            try:
+                catch[blocks[-1]] += 1
+            except KeyError:
+                return CheckResult.wrong("Your program is using a word '{0}'. "
+                                         "This word is not "
+                                         "on the list from the description".format(blocks[-1]))
+
+        if attach == 'last':
+            if catch.values() == 0:
                 return CheckResult.wrong(
                     "Looks like your program is not using "
                     "all of the words to guess from the list in description"
                 )
-            else:
-                return CheckResult.correct()
+
+        return CheckResult.correct()
 
 
 if __name__ == '__main__':
