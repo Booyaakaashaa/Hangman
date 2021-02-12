@@ -5,19 +5,57 @@ CheckResult.correct = lambda: CheckResult(True, '')
 CheckResult.wrong = lambda feedback: CheckResult(False, feedback)
 
 
-right_str = """H A N G M A N
-The game will be available soon."""
-
-
 class CoffeeMachineTest(StageTest):
     def generate(self) -> List[TestCase]:
-        return [TestCase(attach=right_str)]
+        return [
+            TestCase(stdin='python', attach=(True, 'python')),
+            TestCase(stdin='java', attach=(False, 'java')),
+            TestCase(stdin='pyton', attach=(False, '')),
+            TestCase(stdin='python', attach=(True, '')),
+        ]
 
-    def check(self, reply: str, attach: str) -> CheckResult:
-        if reply.strip() == attach.strip():
-            return CheckResult.correct()
-        return CheckResult.wrong(
-            "You should print output exactly like in the example")
+    def check(self, reply: str, attach: Any) -> CheckResult:
+
+        right_ans, guess = attach
+
+        survived = 'You survived!'
+        hanged = 'You lost!'
+
+        if survived in reply and hanged in reply:
+            return CheckResult.wrong(
+                f'Looks like your output contains both \"{survived}\"'
+                f' and \"{hanged}\". You should output only one of them.')
+
+        if survived not in reply and hanged not in reply:
+            return CheckResult.wrong(
+                f'Looks like your output doesn\'t contain neither \"{survived}\"'
+                f' nor \"{hanged}\". You should output one of them.')
+
+        if right_ans:
+            if survived in reply:
+                return CheckResult.correct()
+
+            if guess:
+                return CheckResult.wrong(
+                    'input: ' + 'python\n'
+                    'correct output: ' + survived
+                )
+
+            else:
+                return CheckResult.wrong('')
+
+        else:
+            if hanged in reply:
+                return CheckResult.correct()
+
+            if guess:
+                return CheckResult.wrong(
+                    'input: ' + 'java\n'
+                    'correct output: ' + hanged
+                )
+
+            else:
+                return CheckResult.wrong('')
 
 
 if __name__ == '__main__':
